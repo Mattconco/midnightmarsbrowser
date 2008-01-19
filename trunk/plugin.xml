@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?eclipse version="3.2"?>
+
+<plugin>
+
+
+
+   <extension
+         id="MidnightMarsBrowser.application"
+         point="org.eclipse.core.runtime.applications">
+
+      <application>
+
+         <run
+
+               class="midnightmarsbrowser.application.Application">
+
+         </run>
+
+      </application>
+
+   </extension>
+
+   <extension
+
+         point="org.eclipse.ui.perspectives">
+
+      <perspective
+
+            name="Perspective"
+
+            class="midnightmarsbrowser.perspectives.Perspective"
+
+            id="midnightmarsbrowser.perspective">
+
+      </perspective>
+
+   </extension>
+
+   <extension
+
+         point="org.eclipse.ui.views">
+
+      <category
+
+            id="MidnightMarsBrowser"
+
+            name="Midnight Mars Browser"/>
+
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.TimeView"
+
+            icon="icons/waiting.gif"
+
+            id="midnightmarsbrowser.views.TimeView"
+
+            name="Time"/>
+
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.ImagesView"
+
+            icon="icons/images.gif"
+
+            id="midnightmarsbrowser.views.ImagesView"
+
+            name="Images"/>
+
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.TimeIntervalsView"
+
+            icon="icons/time_intervals.gif"
+
+            id="midnightmarsbrowser.views.TimeIntervalsView"
+
+            name="Time Intervals"/>
+
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.ViewerSettingsView"
+
+            icon="icons/viewer_settings.gif"
+
+            id="midnightmarsbrowser.views.ViewerSettingsView"
+
+            name="Viewer Settings"/>
+
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.UpdateConsoleView"
+
+            icon="icons/console_view.gif"
+
+            id="midnightmarsbrowser.views.UpdateConsoleView"
+
+            name="Update Console"/>
+
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.ImageDestretchView"
+
+            icon="icons/sample.gif"
+
+            id="midnightmarsbrowser.views.ImageDestretchView"
+
+            name="Image Destretch"/>
+            
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.PanInfoView"
+
+            icon="icons/int_obj.gif"
+
+            id="midnightmarsbrowser.views.PanInfoView"
+
+            name="Panorama Info"/>
+            
+      <view
+
+            category="MidnightMarsBrowser"
+
+            class="midnightmarsbrowser.views.ImageInfoView"
+
+            icon="icons/information.gif"
+
+            id="midnightmarsbrowser.views.ImageInfoView"
+
+            name="Image Info"/>
+            
+   </extension>
+
+
+   <extension
+
+         point="org.eclipse.ui.editors">
+
+      <editor
+
+            class="midnightmarsbrowser.editors.ViewerEditor"
+
+            default="false"
+
+            icon="icons/mars.gif"
+
+            id="midnight.mer.editors.SlideshowEditor"
+
+            name="Viewer"/>
+
+      <editor
+
+            class="midnightmarsbrowser.editors.UpdateViewerEditor"
+
+            default="false"
+
+            icon="icons/logo16.gif"
+
+            id="midnightmarsbrowser.editors.UpdateViewerEditor"
+
+            name="Update Viewer"/>
+            
+      <editor
+
+            class="midnightmarsbrowser.editors.ImageEditor"
+
+            default="false"
+
+            icon="icons/logo16.gif"
+
+            id="midnightmarsbrowser.editors.ImageEditor"
+
+            name="Image Viewer"/>
+            
+   </extension>
+
+   <extension
+         id="product"
+         name="Midnight Mars Browser"
+         point="org.eclipse.core.runtime.products">
+
+      <product
+
+            application="MidnightMarsBrowser.application"
+
+            name="Midnight Mars Browser">
+
+         <property
+               name="aboutText"
+               value="Midnight Mars Browser 2.0 Development Version&#x0A;Copyright (c) 2007 Michael R Howard&#x0A;Home page: http://midnightmarsbrowser.blogspot.com&#x0A;&#x0A;This program downloads images from the Mars Exploration Rover missions made public by &#x0A;NASA/JPL.  Thanks go to NASA/JPL and the Mars Exploration Rover team for making these &#x0A;images available in real-time on the Internet. &#x0A;See the Mars Rover homepage at http://marsrovers.jpl.nasa.gov/home/index.html&#x0A;Images are also download via Exploratorium, who we owe thanks for making the images&#x0A;available hourly: http://www.exploratorium.edu/mars/raw_data.html&#x0A;&#x0A;3D rover model by Doug Ellison.&#x0A;Callibrated color images by Daniel Crotty: http://www.lyle.org/~markoff/&#x0A;&#x0A;Built on Eclipse: http://www.eclipse.org&#x0A;Uses the Lightweight Java Game Library Project (LWJGL)&#x0A;Copyright (c) 2002-2007 Lightweight Java Game Library Project&#x0A;http://lwjgl.org/&#x0A;&#x0A;This program is free software; you can redistribute it and/or&#x0A;modify it under the terms of the GNU General Public License&#x0A;as published by the Free Software Foundation; either version 2&#x0A;of the License, or (at your option) any later version.&#x0A;&#x0A;This program is distributed in the hope that it will be useful,&#x0A;but WITHOUT ANY WARRANTY; without even the implied warranty of&#x0A;MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the&#x0A;GNU General Public License for more details. &#x0A;http://www.gnu.org/copyleft/gpl.html"/>
+
+         <property
+
+               name="windowImages"
+
+               value="icons/MMByuri16.gif,icons/MMByuri32.gif,icons/MMByuri48.gif,icons/MMByuri64.gif,icons/MMByuri128.gif"/>
+
+         <property
+
+               name="aboutImage"
+
+               value="icons/logo128.gif"/>
+         <property
+               name="appName"
+               value="Midnight Mars Browser">
+         </property>
+
+      </product>
+
+   </extension>
+</plugin>
+
