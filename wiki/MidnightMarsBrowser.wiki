@@ -1,7 +1,10 @@
 #summary Main wiki page for Midnight Mars Browser
 #labels Featured
 
-This is the wiki home page for Midnight Mars Browser.  This will be filled in later with documentation, news, etc...
+Midnight Mars Browser is a program used to download Mars Exploration Rover (MER) images and view them in slideshow and panorama format.  Version 2.0 is an Eclipse Rich Client Platform (RCP) Java application.
 
+[UserDocumentation User Documentation]
 
-[http://code.google.com/p/midnightmarsbrowser/wiki/DeveloperDocumentation Developer Documentation]
+[AdvancedTopics Advanced Topics]
+
+[DeveloperDocumentation Developer Documentation (Super-Advanced)]
