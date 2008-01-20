@@ -5,3 +5,5 @@
 [SystemRequirements System Requirements]
 
 [GettingStarted Getting Started]
+
+[ConfiguringMemoryUsage Configuring Memory Usage]
