@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Lwjgl Plug-in
+Bundle-SymbolicName: lwjgl
+Bundle-Version: 1.0.0
+Bundle-ClassPath: lwjgl.jar
+Bundle-Localization: plugin
+Export-Package: org.lwjgl,
+ org.lwjgl.input,
+ org.lwjgl.openal,
+ org.lwjgl.opengl,
+ org.lwjgl.opengl.glu
