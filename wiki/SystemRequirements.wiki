@@ -1,0 +1,17 @@
+#summary System requirements and notes before downloading
+
+= System Requirements =
+
+To create a better user interface, MMB2.0 has been rewritten using the Eclipse Rich Client Platform. The panorama feature is rewritten to use OpenGL directly instead of Java 3D.  Since it’s a complete rewrite, many of the features in MMB 1.x have still to be moved over to 2.x. This is taking a long time, which is why there will only be development releases for awhile.
+
+MMB2.0 requires Java 1.4 or later.
+ 
+Unlike 1.x, MMB2.0 does not require Java 3D, nor even want it.
+ 
+Windows and Mac OS X are supported; those are the only platforms I can test on.  
+
+512 megs of RAM is the bare minimum required.
+
+Huge amounts of hard drive space is required if you’re going to download many images.  We’re talking multiple gigabytes. The rovers have been going for a long time now; there are a lot of images.
+ 
+MMB2.0 is compatible with MMB1.x data, so you can go back and use features in MMB1.x - but don't run updates in both simultaneously or you will have image index corruption problems. Shut down one before using the other.
