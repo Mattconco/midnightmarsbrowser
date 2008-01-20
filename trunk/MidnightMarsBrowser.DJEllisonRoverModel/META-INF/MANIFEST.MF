@@ -1,0 +1,9 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: DJEllisonRoverModel Plug-in
+Bundle-SymbolicName: MidnightMarsBrowser.DJEllisonRoverModel
+Bundle-Version: 1.0.2
+Bundle-Activator: midnightmarsbrowser.djellisonrovermodel.Activator
+Bundle-Localization: plugin
+Require-Bundle: org.eclipse.core.runtime
+Eclipse-LazyStart: true
