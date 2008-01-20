@@ -7,7 +7,7 @@ These are the basic steps to set up the Midnight Mars Browser source code in Ecl
 
 == Checking out the source code ==
 
-  # Install [http://subversion.tigris.org/ | Subversion] for your platform
+  # Install [http://subversion.tigris.org/ Subversion] for your platform
   # Create a directory for the projects (this will be your Eclipse workspace directory)
   # cd to that directory at the command line
   # `svn checkout https://midnightmarsbrowser.googlecode.com/svn/trunk/ . --username yourid@gmail.com`
