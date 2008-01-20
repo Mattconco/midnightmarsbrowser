@@ -1,4 +1,6 @@
+#summary Information for crazy people who want to mess with the source code
 #labels Phase-Implementation
+
 = Developer Documentation =
 
 These are the basic steps to set up the Midnight Mars Browser source code in Eclipse 3.3.  This is only for people who know Java and want to mess with the program source code.  Most people should simply download the program .zip file instead.
