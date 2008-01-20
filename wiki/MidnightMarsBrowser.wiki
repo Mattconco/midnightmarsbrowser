@@ -2,3 +2,6 @@
 #labels Featured
 
 This is the wiki home page for Midnight Mars Browser.  This will be filled in later with documentation, news, etc...
+
+
+[http://code.google.com/p/midnightmarsbrowser/wiki/DeveloperDocumentation Developer Documentation]
