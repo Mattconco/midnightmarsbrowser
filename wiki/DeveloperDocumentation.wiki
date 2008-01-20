@@ -1,0 +1,30 @@
+#labels Phase-Implementation
+These are the basic steps to set up the Midnight Mars Browser source code in Eclipse 3.3.  This is only for people who know Java and want to mess with the program source code.  Most people should simply download the program .zip file instead.
+
+= Checking out the source code =
+
+  # Install [http://subversion.tigris.org/ | Subversion] for your platform
+  # Create a directory for the projects (this will be your Eclipse workspace directory)
+  # cd to that directory at the command line
+  # `svn checkout https://midnightmarsbrowser.googlecode.com/svn/trunk/ . --username yourid@gmail.com`
+      or if you are not a project member, omit the --username option for anonymous checkout
+
+= Setting up the Eclipse projects =
+
+  # Run Eclipse 3.3
+  # Switch Workspace your checkout directory from above
+  # File->Import:  
+    # select General->Existing Projects into Workspace
+    # select workspace directory
+    # select all projects
+    # Finish
+
+= Running the program from Eclipse =
+
+  # Select "Open Run Dialog..."
+  # Select "Eclipse Application"
+  # Press the "New Launch Configuration" button
+  # Give the new configuration a name
+  # Make sure "Run a product" is selected and choose "MidnightMarsBrowser.product"
+  # In the "Arguments" tab, in "VM arguments", put `-Xmx512m -DmaxPanBytes=256m` 
+  # Click "Apply" and "Run"
