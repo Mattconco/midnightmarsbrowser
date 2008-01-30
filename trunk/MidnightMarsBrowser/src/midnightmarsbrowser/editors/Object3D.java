@@ -16,6 +16,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
 
+import midnightmarsbrowser.dialogs.UnknownExceptionDialog;
+
 import org.eclipse.swt.examples.openglview.ImageDataUtil;
 import org.eclipse.swt.graphics.ImageData;
 import org.eclipse.swt.graphics.PaletteData;
@@ -54,7 +56,11 @@ public class Object3D {
 		float Ns = 0.0f;
 		int illum = 2;
 		String map_Kd;
-		int textureNumber;
+		int textureNumber = -1;
+		boolean loaded = false;
+		ArrayList loadImageBuffer = null;
+		ArrayList loadImageWidth = null;
+		ArrayList loadImageHeight = null;		
 	}
 	
 	
@@ -69,13 +75,18 @@ public class Object3D {
 
 	private ArrayList faces = new ArrayList(); // Array of Faces
 	
-	private HashMap materials = new HashMap();
+	HashMap materials = new HashMap();
 
     IntBuffer textures;
 	
 	private int objectlist;
 
 	private int numpolys = 0;
+	
+	URL url;
+	
+	int maxTextures = 15;
+	boolean mipmap = true;
 
 	// // Statisitcs for drawing ////
 	public float toppoint = 0; // y+
@@ -92,6 +103,7 @@ public class Object3D {
 
 	public Object3D(URL url, boolean centerit, float translateX, float translateY, float translateZ, 
 			float scaleFactor) throws IOException {
+		this.url = url;
 		loadObject(url);
 		if (centerit) {
 			centerit();
@@ -100,7 +112,8 @@ public class Object3D {
 		if (scaleFactor != 1.0f) {
 			scaleit(scaleFactor);
 		}
-		loadTextures(url);
+		
+		mapTextureIds();
 		opengldrawtolist();
 		numpolys = faces.size();
 		vertexsets.clear();
@@ -317,77 +330,23 @@ public class Object3D {
 	}
 
 	/**
-	 * Load the textures for the model. 
-	 * Assumes we have already entered the GLContext
+	 * Find texture ids for the materials
 	 * @param contextUrl
 	 * @throws IOException 
 	 */
-	private void loadTextures(URL contextUrl) throws IOException {
+	private void mapTextureIds() throws IOException {
 		// TODO dynamically determine number of textures used in object
-		int maxTextures = 15;
-		boolean mipmap = true;
+		int textureCounter = 0;
         textures = BufferUtils.createIntBuffer(maxTextures);
         GL11.glGenTextures(textures);
-		int textureCounter = 0;
 //		FloatBuffer floatBuffer = BufferUtils.createFloatBuffer(4);
-        
         Iterator iter = materials.values().iterator();
         while (iter.hasNext() && (textureCounter < maxTextures)) {
         	Material mtl = (Material) iter.next();
         	if (mtl.map_Kd == null)
-        		continue;
-    		URL mapURL = new URL(contextUrl, mtl.map_Kd);
-            InputStream mapIS = mapURL.openStream(); 
-            ImageData imageData = new ImageData(mapIS);
-    		PaletteData newPalette = new PaletteData (0xff0000, 0xff00, 0xff);
-    		ImageData newImageData = new ImageData (imageData.width, imageData.height, 24, newPalette);
-    		ImageDataUtil.blit (
-    			1,
-    			imageData.data,
-    			imageData.depth,
-    			imageData.bytesPerLine,
-    			(imageData.depth != 16) ? ImageDataUtil.MSB_FIRST : ImageDataUtil.LSB_FIRST,
-    			0,
-    			0,
-    			imageData.width,
-    			imageData.height,
-    			imageData.palette.redMask,
-    			imageData.palette.greenMask,
-    			imageData.palette.blueMask,
-    			255,
-    			null,
-    			0,
-    			0,
-    			0,
-    			newImageData.data,
-    			newImageData.depth,
-    			newImageData.bytesPerLine,
-    			(newImageData.depth != 16) ? ImageDataUtil.MSB_FIRST : ImageDataUtil.LSB_FIRST,
-    			0,
-    			0,
-    			newImageData.width,
-    			newImageData.height,
-    			newImageData.palette.redMask,
-    			newImageData.palette.greenMask,
-    			newImageData.palette.blueMask,
-    			false,
-    			false);            
-            ByteBuffer imageBuffer = ByteBuffer.allocateDirect(newImageData.data.length);
-            imageBuffer.put(newImageData.data);
-            imageBuffer.flip();            
+        		continue;        	
 			mtl.textureNumber = textures.get(textureCounter);
 			textureCounter++;
-	        GL11.glBindTexture(GL11.GL_TEXTURE_2D, mtl.textureNumber);	        
-	        if (mipmap) {
-	            GLU.gluBuild2DMipmaps(GL11.GL_TEXTURE_2D, GL11.GL_RGB8, newImageData.width, newImageData.height, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, imageBuffer);
-		        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
-	            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-	        }
-	        else {
-	            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB8, newImageData.width, newImageData.height, 0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, imageBuffer);
-	            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
-	            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
-	        }
         }
 	}
 	
@@ -441,7 +400,7 @@ public class Object3D {
 			GL11.glBindTexture(GL11.GL_TEXTURE_2D, mtl.textureNumber);
 			
 			floatBuffer.rewind();
-	        if (mtl.textureNumber != 0) {
+	        if (mtl.textureNumber >= 0) {
 				floatBuffer.put(1.0f);
 				floatBuffer.put(1.0f);
 				floatBuffer.put(1.0f);
@@ -534,5 +493,56 @@ public class Object3D {
 	public void opengldraw() {
 		GL11.glCallList(objectlist);
 	}
+	
+	/**
+	 * Bind textures that have been pre-loaded by the Object3DImageLoader thread.
+	 */
+	public boolean bindTextures() {
+		boolean finished = true;
+		try {
+	        Iterator iter = materials.values().iterator();
+	        while (iter.hasNext()) {
+	        	Material mtl = (Material) iter.next();
+	        	if (mtl.textureNumber < 0)
+	        		continue;
+	        	if (!mtl.loaded) {
+	        		finished = false;
+	        	}
+				if (mtl.loadImageBuffer != null) {
+			        GL11.glBindTexture(GL11.GL_TEXTURE_2D, mtl.textureNumber);
+			        int numLevels = mtl.loadImageBuffer.size();
+			        if (numLevels == 1) {
+			        	int width  = ((Integer) mtl.loadImageWidth.get(0)).intValue();
+			        	int height  = ((Integer) mtl.loadImageHeight.get(0)).intValue();
+			        	ByteBuffer buffer = (ByteBuffer) mtl.loadImageBuffer.get(0);
+			            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGB8, width, height, 0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, buffer);
+			            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR);
+			            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
+			        }
+			        else {
+				        GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MIN_FILTER, GL11.GL_LINEAR_MIPMAP_LINEAR);
+			            GL11.glTexParameteri(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR/*GL11.GL_NEAREST*/);
+			        	for (int level=0; level<numLevels; level++) {
+				        	int width  = ((Integer) mtl.loadImageWidth.get(level)).intValue();
+				        	int height  = ((Integer) mtl.loadImageHeight.get(level)).intValue();
+				        	ByteBuffer buffer = (ByteBuffer) mtl.loadImageBuffer.get(level);
+				            GL11.glTexImage2D(GL11.GL_TEXTURE_2D, level, GL11.GL_RGB8, width, height, 0, GL11.GL_RGB, GL11.GL_UNSIGNED_BYTE, buffer);
+			        	}
+			        }
+			        mtl.loadImageBuffer = null;
+			        mtl.loadImageHeight = null;
+			        mtl.loadImageWidth = null;
+			        mtl.loaded = true;
+			        break;
+				}
+	        }
+		}
+		catch (Throwable e) {
+			//UnknownExceptionDialog.openDialog(this.getShell(), "Error loading image", e);
+			e.printStackTrace(); 
+		}
+		return finished;
+	}	
+	
 
 }

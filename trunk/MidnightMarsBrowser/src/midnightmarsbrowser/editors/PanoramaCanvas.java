@@ -170,6 +170,8 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	private double moveLocationVectorA;
 	private double moveLocationVectorB;
 	private double moveLocationVectorC;
+	private Object3DImageLoader roverImageLoader;
+	private boolean mer_model_loaded = false;
 	
 	
 	
@@ -189,6 +191,26 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	        //GL11.glDepthFunc(GL11.GL_LEQUAL);								// The Type Of Depth Testing To Do
 	        GL11.glHint(GL11.GL_PERSPECTIVE_CORRECTION_HINT, GL11.GL_NICEST);	// Really Nice Perspective Calculations
 	        
+	        // read rover model
+	        // According to http://hobbiton.thisside.net/rovermanual/ 
+	        // the length of the WEB is about 34" == 0.8636 meters
+	        // in the .obj file the length of the WEB is 33.849996
+	        // whoah - that can't be a coincidence, can it? :)
+	        // So I guess the coversion factor is 0.0254 (inches to meters)
+	        // The rover navigation frame seems to be centered at the WEB center-bottom 
+	        // (http://anserver1.eprsl.wustl.edu/anteam/mera/sis/Flight_School_coordinate_systems.ppt)
+	        // so we should center the model there, so the quaternion rotation is applied properly.
+	        // update: scale changed - new 1a model WEB length is 0.881854, so I guess we switched to meter scale	        
+//	        URL url = Platform.getBundle("MidnightMarsBrowser.DJEllisonRoverModel").getResource("3dmodel/mer.obj");
+//	        mer_model = new Object3D(url, false, 0.0f, -11.812945f, 0.0f, 0.0254f);
+	        URL url = Platform.getBundle("MidnightMarsBrowser.DJEllisonRoverModel").getResource("3dmodel/mer_1a.obj");
+	        mer_model = new Object3D(url, false, 0.0f, -0.3f, 0.0f, 1.0f);	        
+	        roverImageLoader = new Object3DImageLoader(this, mer_model);
+	        Thread roverImageLoaderThread= new Thread(roverImageLoader);
+	        roverImageLoaderThread.setPriority(Thread.MIN_PRIORITY);
+	        roverImageLoaderThread.start();
+
+	        // Image textures
 	        textures = BufferUtils.createIntBuffer(maxNumTextures);
 	        GL11.glGenTextures(textures);
 	        
@@ -629,7 +651,10 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 				
 				synchronized(imageLoader) {
 					sortPanImages();
-					bindTextures();
+					bindTextures();	
+					if (!mer_model_loaded ) {
+						mer_model_loaded = mer_model.bindTextures();
+					}
 				}
 		        
 				findDrawList();
@@ -681,25 +706,6 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 					renderHotspots();
 				}				
 				if (editor.settings.panShowRoverModel) {
-					if (mer_model == null) {
-				        // TEST read rover model
-				        // According to http://hobbiton.thisside.net/rovermanual/ 
-				        // the length of the WEB is about 34" == 0.8636 meters
-				        // in the .obj file the length of the WEB is 33.849996
-				        // whoah - that can't be a coincidence, can it? :)
-				        // So I guess the coversion factor is 0.0254 (inches to meters)
-				        // The rover navigation frame seems to be centered at the WEB center-bottom 
-				        // (http://anserver1.eprsl.wustl.edu/anteam/mera/sis/Flight_School_coordinate_systems.ppt)
-				        // so we should center the model there, so the quaternion rotation is applied properly.
-				        
-				        // scale changed - new 1a model WEB length is 0.881854, so I guess we switched to meter scale
-				        
-//				        URL url = Platform.getBundle("MidnightMarsBrowser.DJEllisonRoverModel").getResource("3dmodel/mer.obj");
-//				        mer_model = new Object3D(url, false, 0.0f, -11.812945f, 0.0f, 0.0254f);
-				        URL url = Platform.getBundle("MidnightMarsBrowser.DJEllisonRoverModel").getResource("3dmodel/mer_1a.obj");
-				        mer_model = new Object3D(url, false, 0.0f, -0.3f, 0.0f, 1.0f);
-					}
-					
 					//startPerspective(zNearRover, zFarHotspots);					
 					renderRoverModel();
 				}
