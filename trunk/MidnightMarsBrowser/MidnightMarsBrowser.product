@@ -56,7 +56,6 @@ http://www.gnu.org/copyleft/gpl.html
       </win>
    </launcher>
 
-
    <vm>
    </vm>
 
@@ -94,7 +93,7 @@ http://www.gnu.org/copyleft/gpl.html
    </plugins>
 
    <features>
-      <feature id="midnightmarsbrowser.feature" version="2.0.0.20080120"/>
+      <feature id="midnightmarsbrowser.feature" version="2.0.0.20080203"/>
    </features>
 
 </product>
