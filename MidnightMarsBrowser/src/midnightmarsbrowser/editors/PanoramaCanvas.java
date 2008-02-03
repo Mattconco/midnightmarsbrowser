@@ -68,7 +68,7 @@ import com.sun.image.codec.jpeg.JPEGImageEncoder;
 public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListener, MouseMoveListener {
 	private static final int MOVE_LOCATION_VECTOR_MIN_TIME_MILLIS = 150; //400;
 	private static final int MOVE_LOCATION_VECTOR_MAX_TIME_MILLIS = 700;
-	private static final double MOVE_LOCATION_VECTOR_RATE_PER_MILLI = 0.01;
+	private static final double MOVE_LOCATION_VECTOR_RATE_PER_MILLI = 0.02; //0.01;
 	private static final double MOVE_LOCATION_VECTOR_MIN_DISTANCE = 1.0;
 	ViewerEditor editor;
 	private boolean  supressError = false;
@@ -86,7 +86,9 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	//private float zNearRover = 0.05f;
 	private float zFarHotspots = 1000.0f;
     private final float maxFOV = 170.0f;
-    private final int trackingSiteSpread = 2;
+    private final int trackingSiteSpread = 6;
+	final double maxTrackingRange = 150.0;
+	final double maxTrackingRangeSq = maxTrackingRange * maxTrackingRange;
     
     IntBuffer textures;
     boolean hasQuaternion = false;
@@ -147,6 +149,7 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	float moveToElRate = 0.0f;
 	
 	boolean mousePressed = false;
+	boolean mouseDragged = false;
 	long mouseStartTime = 0;
 	long mouseStopTime = 0;
 	int mouseStartX = 0;
@@ -172,7 +175,16 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	private double moveLocationVectorC;
 	private Object3DImageLoader roverImageLoader;
 	private boolean mer_model_loaded = false;
+	private ArrayList roverTrackingList;
 	
+	class RoverTrackingListEntry {
+		boolean segmentStart = false;
+		LocationMetadataEntry locationMetadataEntry;
+		SiteMetadataEntry siteMetadataEntry;
+		TimeInterval locationListEntry;
+		float screenX;
+		float screenY;
+	}
 	
 	
 	public PanoramaCanvas(Composite parent, int style, GLData data, MMBWorkspace workspace, ViewerEditor editor) {
@@ -353,7 +365,7 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	public void setSelectedTimeInterval(String spacecraftId, TimeInterval timeInterval, boolean findSelectedImage) {		
 		imageLoader.suspend();
 		String lastSpacecraftId = selectedSpacecraftId;
-		TimeInterval lastTimeInterval = selectedTimeInterval;		
+		TimeInterval lastTimeInterval = selectedTimeInterval;
 		selectedSpacecraftId = spacecraftId;
 		selectedTimeInterval = timeInterval;
 		this.currentLocationCounter = timeInterval.getStartLocation();
@@ -437,6 +449,11 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 				currentLocationVectorB = dstLocationVectorB;
 				currentLocationVectorC = dstLocationVectorC;
 				currentLocationVectorExists = dstLocationVectorExists;		
+				if (roverModelLocationMetadata != null && roverModelLocationMetadata.location.equals(currentLocationCounter)) {
+					editor.settings.panShowRoverModel = false;
+					// Can we do this safely here?
+					//editor.fireViewSettingsChanged(null, editor.settings);
+				}
 			}
 		}
 		else {
@@ -446,10 +463,84 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 			currentLocationVectorExists = dstLocationVectorExists;
 		}
 
+		// find rover tracking list for this location
+		roverTrackingList = new ArrayList();
+		if (selectedTimeInterval.getLocationMetadataEntry() != null && dstLocationVectorExists) {
+			int cacheSite = -1;
+			boolean outOfRange = true;
+			SiteMetadataEntry cacheSiteMetadataEntry = null;
+			RoverTrackingListEntry lastListEntry = null;
+			double lastda = 0.0;
+			double lastdb = 0.0;
+			double lastdc = 0.0;
+			final double tolerance = 0.001;
+			for (int i=0; i<allLocations.length; i++) {
+				LocationMetadataEntry locationMetadataEntry = workspace.getLocationMetadata().getEntry(selectedSpacecraftId, allLocations[i]) ;
+				int siteDiff = locationMetadataEntry.location.site - currentLocationCounter.site;
+				if (siteDiff < -trackingSiteSpread)
+					continue;
+				if (!locationMetadataEntry.has_site_rover_origin_offset_vector)
+					continue;
+				if (cacheSite != locationMetadataEntry.location.site) {
+					cacheSiteMetadataEntry = workspace.getSiteMetadata().getEntry(selectedSpacecraftId, new Integer(locationMetadataEntry.location.site));
+					if (cacheSiteMetadataEntry == null)  {
+						continue;
+					}
+					else {
+						cacheSite = locationMetadataEntry.location.site;
+					}
+				}
+	            double da = locationMetadataEntry.rover_origin_offset_vector_a + cacheSiteMetadataEntry.offset_vector_a - dstLocationVectorA;
+	            double db = locationMetadataEntry.rover_origin_offset_vector_b + cacheSiteMetadataEntry.offset_vector_b - dstLocationVectorB;
+	            double dc = locationMetadataEntry.rover_origin_offset_vector_c + cacheSiteMetadataEntry.offset_vector_c - dstLocationVectorC;
+				double distsq = da*da + db*db + dc*dc;
+				if (distsq > maxTrackingRangeSq) {
+					outOfRange = true;
+				}
+				else {
+					// myLocationListEntry will be null if the location is not in the list of visible (selected) locations
+					// TODO this doesn't exactly work right, since a single time interval may not include all the 
+					// images for a location
+					TimeInterval myLocationListEntry = selectedTimeInterval.getParent().getEntry(locationMetadataEntry.location);
+					RoverTrackingListEntry listEntry = new RoverTrackingListEntry();
+					listEntry.locationMetadataEntry = locationMetadataEntry;
+					listEntry.siteMetadataEntry = cacheSiteMetadataEntry;
+					listEntry.locationListEntry = myLocationListEntry;
+					if (outOfRange) {
+						listEntry.segmentStart = true;
+						outOfRange = false;
+						roverTrackingList.add(listEntry);
+					}
+					else if ((lastListEntry != null) && (Math.abs(lastda-da) < tolerance) && (Math.abs(lastdb-db) < tolerance) && (Math.abs(lastdc-dc) < tolerance)) {
+						// In cases where two hotspots share the same physical location (like at site resets), 
+						// take the one with the most images, so we don't miss some significant pans (Bonneville, Missoula, etc.)
+						if (myLocationListEntry != null) {
+							if (lastListEntry.locationListEntry == null || myLocationListEntry.getNumEnabledImages() > lastListEntry.locationListEntry.getNumEnabledImages()) {
+								roverTrackingList.set(roverTrackingList.size()-1, listEntry);
+								lastListEntry = listEntry;
+								lastda = da;
+								lastdb = db;
+								lastdc = dc;
+							}
+						}
+					}
+					else {
+						roverTrackingList.add(listEntry);
+						lastListEntry = listEntry;
+						lastda = da;
+						lastdb = db;
+						lastdc = dc;
+					}
+				}
+				if (siteDiff >= trackingSiteSpread) {
+					break;
+				}
+			}
+		}
+		
 		imageLoader.resume();
 	}
-	
-	
+		
 	/**
 	 * 	Find number of bytes in all the enabled images in the pan, plus mipmapped images
 	 *  The method of finding the number of pixels in the texture map must 
@@ -957,151 +1048,151 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 		}		
 	}
 	
-	void renderHotspots() {
-//		LocationListEntry[] locations = locationList.getEntries();
-		boolean afterCurrent = false;
-		boolean hasLastPos = false;
-		float lastX = 0.0f;
-		float lastY = 0.0f;
-		float lastZ = 0.0f;
-		
-		final float halfWidth = 0.1f / 4;
-		final float halfLength = 0.1f / 4;
-		final float halfHeight = 0.1f / 4;
-		final float eyeHeight = 0.91712f;//1.1f;
-		
-		int cacheSite = -1;
-		double cacheSite_offset_vector_a = 0.0d;
-		double cacheSite_offset_vector_b = 0.0d;
-		double cacheSite_offset_vector_c = 0.0d;
-		
-		// Find pan position offset vector
-		if (selectedTimeInterval.getLocationMetadataEntry() == null) {
-			return;
-		}
-		
-		if (!dstLocationVectorExists)
-			return;
-		
-		GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);		// no texture
-		
-		for (int i=0; i<allLocations.length; i++) {
-			LocationMetadataEntry locationMetadataEntry = workspace.getLocationMetadata().getEntry(selectedSpacecraftId, allLocations[i]) ;
-			int siteDiff = locationMetadataEntry.location.site - currentLocationCounter.site;
-			if (siteDiff < -trackingSiteSpread || siteDiff > trackingSiteSpread)
-				continue;
-			if (!locationMetadataEntry.has_site_rover_origin_offset_vector)
-				continue;
-			
-			if (cacheSite != locationMetadataEntry.location.site) {
-				// TODO I don't like creating new Integer objects here, even at a slow pace...
-				SiteMetadataEntry siteMetadataEntry = workspace.getSiteMetadata().getEntry(selectedSpacecraftId, new Integer(locationMetadataEntry.location.site));
-				if (siteMetadataEntry == null)  {
-					continue;
-				}
-				else {
-					cacheSite = locationMetadataEntry.location.site;
-					cacheSite_offset_vector_a = siteMetadataEntry.offset_vector_a;
-					cacheSite_offset_vector_b = siteMetadataEntry.offset_vector_b;
-					cacheSite_offset_vector_c = siteMetadataEntry.offset_vector_c;
-				}
-			}
-			
-			double da = locationMetadataEntry.rover_origin_offset_vector_a + cacheSite_offset_vector_a - currentLocationVectorA;
-			double db = locationMetadataEntry.rover_origin_offset_vector_b + cacheSite_offset_vector_b - currentLocationVectorB;
-			double dc = locationMetadataEntry.rover_origin_offset_vector_c + cacheSite_offset_vector_c - currentLocationVectorC;
-			
-			float x = (float) db;
-			float y = (-(float)dc) - eyeHeight;
-			float z = - (float) da;
-			
-			// myLocationListEntry will be null if the location is not in the list of visible (selected) locations
-			// TODO this doesn't exactly work right, since a single time interval may not include all the 
-			// images for a location
-			TimeInterval myLocationListEntry = selectedTimeInterval.getParent().getEntry(locationMetadataEntry.location);
-			
-			// calculate brightness of point based on number of images visible for location
-			float brightness = 0.0f;
-			
-			GL11.glLoadIdentity();
-			GL11.glTranslatef(x, y, z);
-			
-			if (myLocationListEntry != null && siteDiff < 2 && siteDiff > -2 && myLocationListEntry.getNumEnabledImages() > 1) {
-				brightness = 0.5f + 0.1f * myLocationListEntry.getNumEnabledImages();
-				if (brightness > 1.0f) {
-					brightness = 1.0f;
-				}
-						
-				GL11.glBegin(GL11.GL_QUADS);           	// D draw A Quad
-				
-				if (myLocationListEntry.getStartLocation().equals(selectedTimeInterval.getStartLocation())) {
-					GL11.glColor3f(brightness, 0.0f, brightness);				
-				}
-				else if (afterCurrent) {
-					GL11.glColor3f(0.0f, 0.0f, brightness);
-				}
-				else {
-					GL11.glColor3f(brightness, 0.0f, 0.0f);
-				}
-				
-				GL11.glVertex3f(halfWidth, halfHeight, -halfLength);			// Top Right Of The Quad (Top)
-				GL11.glVertex3f(-halfWidth, halfHeight, -halfLength);			// Top Left Of The Quad (Top)
-				GL11.glVertex3f(-halfWidth, halfHeight, halfLength);			// Bottom Left Of The Quad (Top)
-				GL11.glVertex3f(halfWidth, halfHeight, halfLength);			// Bottom Right Of The Quad (Top)
-	
-				GL11.glVertex3f(halfWidth, -halfHeight, halfLength);			// Top Right Of The Quad (Bottom)
-				GL11.glVertex3f(-halfWidth, -halfHeight, halfLength);			// Top Left Of The Quad (Bottom)
-				GL11.glVertex3f(-halfWidth, -halfHeight, -halfLength);			// Bottom Left Of The Quad (Bottom)
-				GL11.glVertex3f(halfWidth, -halfHeight, -halfLength);			// Bottom Right Of The Quad (Bottom)
-	
-				GL11.glVertex3f(halfWidth, halfHeight, halfLength);			// Top Right Of The Quad (Front)
-				GL11.glVertex3f(-halfWidth, halfHeight, halfLength);			// Top Left Of The Quad (Front)
-				GL11.glVertex3f(-halfWidth, -halfHeight, halfLength);			// Bottom Left Of The Quad (Front)
-				GL11.glVertex3f(halfWidth, -halfHeight, halfLength);			// Bottom Right Of The Quad (Front)
-	
-				GL11.glVertex3f(halfWidth, -halfHeight, -halfLength);			// Bottom Left Of The Quad (Back)
-				GL11.glVertex3f(-halfWidth, -halfHeight, -halfLength);			// Bottom Right Of The Quad (Back)
-				GL11.glVertex3f(-halfWidth, halfHeight, -halfLength);			// Top Right Of The Quad (Back)
-				GL11.glVertex3f(halfWidth, halfHeight, -halfLength);			// Top Left Of The Quad (Back)
-	
-				GL11.glVertex3f(-halfWidth, halfHeight, halfLength);			// Top Right Of The Quad (Left)
-				GL11.glVertex3f(-halfWidth, halfHeight, -halfLength);			// Top Left Of The Quad (Left)
-				GL11.glVertex3f(-halfWidth, -halfHeight, -halfLength);			// Bottom Left Of The Quad (Left)
-				GL11.glVertex3f(-halfWidth, -halfHeight, halfLength);			// Bottom Right Of The Quad (Left)
-	
-				GL11.glVertex3f(halfWidth, halfHeight, -halfLength);			// Top Right Of The Quad (Right)
-				GL11.glVertex3f(halfWidth, halfHeight, halfLength);			// Top Left Of The Quad (Right)
-				GL11.glVertex3f(halfWidth, -halfHeight, halfLength);			// Bottom Left Of The Quad (Right)
-				GL11.glVertex3f(halfWidth, -halfHeight, -halfLength);			// Bottom Right Of The Quad (Right)
-				
-				GL11.glEnd();				// Done Drawing The Quads
-			}
-			
-			if (hasLastPos) {
-				brightness = 0.5f;
-				if (afterCurrent) {
-					GL11.glColor3f(0.0f, 0.0f, brightness);
-				}
-				else {
-					GL11.glColor3f(brightness, 0.0f, 0.0f);
-				}				
-				GL11.glLoadIdentity();
-				GL11.glBegin(GL11.GL_LINES);	
-//				GL11.glColor3f(1.0f, 0.0f, 0.0f);				
-				GL11.glVertex3f(lastX, lastY, lastZ);
-				GL11.glVertex3f(x, y, z);
-				GL11.glEnd();
-			}
-			
-			lastX = x;
-			lastY = y;
-			lastZ = z;
-			hasLastPos = true;
-			if (myLocationListEntry != null && myLocationListEntry.getStartLocation().equals(this.selectedTimeInterval.getStartLocation())) {
-				afterCurrent = true;
-			}
-		}
-	}
+    void renderHotspots() {
+//      LocationListEntry[] locations = locationList.getEntries();
+        boolean afterCurrent = false;
+        boolean hasLastPos = false;
+        float lastX = 0.0f;
+        float lastY = 0.0f;
+        float lastZ = 0.0f;
+        
+        final float halfWidth = 0.1f / 2;
+        final float halfLength = 0.1f / 2;
+        final float halfHeight = 0.1f / 2;
+        final float eyeHeight = 0.91712f;//1.1f;
+                
+        // Find pan position offset vector
+        if (selectedTimeInterval.getLocationMetadataEntry() == null) {
+                return;
+        }
+        
+        if (!dstLocationVectorExists)
+                return;
+        
+        GL11.glLoadIdentity();
+        // set up for tracking hotspot screen x,y
+		float projectedXYZ[] = new float[3];        		
+		projectionMatrix.clear();
+		GL11.glGetFloat(GL11.GL_PROJECTION_MATRIX, projectionMatrix);
+		getMatrixAsArray(projectionMatrix, projectionArray);
+		viewportMatrix.clear();
+		GL11.glGetInteger(GL11.GL_VIEWPORT, viewportMatrix);
+		viewportArray[0] = viewportMatrix.get(0);
+		viewportArray[1] = viewportMatrix.get(1);
+		viewportArray[2] = viewportMatrix.get(2);
+		viewportArray[3] = viewportMatrix.get(3);
+        //System.out.println(""+viewportArray[0] + " "+ viewportArray[1]+" "+viewportArray[2]+" "+viewportArray[3]   );        
+		modelMatrix.clear();
+		GL11.glGetFloat(GL11.GL_MODELVIEW_MATRIX, modelMatrix);
+		getMatrixAsArray(modelMatrix, modelArray);
+        
+        GL11.glBindTexture(GL11.GL_TEXTURE_2D, 0);              // no texture
+        
+        for (int i=0; i<roverTrackingList.size()-1; i++) {
+        	RoverTrackingListEntry listEntry = (RoverTrackingListEntry) roverTrackingList.get(i);
+			listEntry.screenX = 0.0f;
+			listEntry.screenY = 0.0f;
+        	
+            double da = listEntry.locationMetadataEntry.rover_origin_offset_vector_a + listEntry.siteMetadataEntry.offset_vector_a - currentLocationVectorA;
+            double db = listEntry.locationMetadataEntry.rover_origin_offset_vector_b + listEntry.siteMetadataEntry.offset_vector_b - currentLocationVectorB;
+            double dc = listEntry.locationMetadataEntry.rover_origin_offset_vector_c + listEntry.siteMetadataEntry.offset_vector_c - currentLocationVectorC;
+                
+            float x = (float) db;
+            float y = (-(float)dc) - eyeHeight;
+            float z = - (float) da;
+
+            // calculate brightness of point based on number of images visible for location
+            float brightness = 0.0f;
+                                
+            if (listEntry.locationListEntry != null && listEntry.locationListEntry.getNumEnabledImages() > 2) {
+            	// track screen x, y of hotspot
+    			GLU.gluProject(x, y, z, modelArray, projectionArray, viewportArray, projectedXYZ);
+    			if (projectedXYZ[2] < 1.0f) {
+	    			listEntry.screenX = projectedXYZ[0];
+	    			// transform y from opengl screen coords to regular screen coords
+	    			listEntry.screenY = viewportArray[3] - projectedXYZ[1];
+    			}
+            	
+            	// render hotspot
+                GL11.glLoadIdentity();
+                GL11.glTranslatef(x, y, z);
+                //System.out.println(""+listEntry.screenX+" "+listEntry.screenY);
+                
+                brightness = 0.5f + 0.1f * listEntry.locationListEntry.getNumEnabledImages();
+                if (brightness > 1.0f) {
+                        brightness = 1.0f;
+                }
+                                        
+                GL11.glBegin(GL11.GL_QUADS);            // D draw A Quad
+                
+                if (listEntry.locationListEntry.getStartLocation().equals(selectedTimeInterval.getStartLocation())) {
+                        GL11.glColor3f(brightness, 0.0f, brightness);                           
+                }
+                else if (afterCurrent) {
+                        GL11.glColor3f(0.0f, 0.0f, brightness);
+                }
+                else {
+                        GL11.glColor3f(brightness, 0.0f, 0.0f);
+                }
+                        
+                GL11.glVertex3f(halfWidth, halfHeight, -halfLength);                    // Top Right Of The Quad (Top)
+                GL11.glVertex3f(-halfWidth, halfHeight, -halfLength);                   // Top Left Of The Quad (Top)
+                GL11.glVertex3f(-halfWidth, halfHeight, halfLength);                    // Bottom Left Of The Quad (Top)
+                GL11.glVertex3f(halfWidth, halfHeight, halfLength);                     // Bottom Right Of The Quad (Top)
+
+                GL11.glVertex3f(halfWidth, -halfHeight, halfLength);                    // Top Right Of The Quad (Bottom)
+                GL11.glVertex3f(-halfWidth, -halfHeight, halfLength);                   // Top Left Of The Quad (Bottom)
+                GL11.glVertex3f(-halfWidth, -halfHeight, -halfLength);                  // Bottom Left Of The Quad (Bottom)
+                GL11.glVertex3f(halfWidth, -halfHeight, -halfLength);                   // Bottom Right Of The Quad (Bottom)
+
+                GL11.glVertex3f(halfWidth, halfHeight, halfLength);                     // Top Right Of The Quad (Front)
+                GL11.glVertex3f(-halfWidth, halfHeight, halfLength);                    // Top Left Of The Quad (Front)
+                GL11.glVertex3f(-halfWidth, -halfHeight, halfLength);                   // Bottom Left Of The Quad (Front)
+                GL11.glVertex3f(halfWidth, -halfHeight, halfLength);                    // Bottom Right Of The Quad (Front)
+
+                GL11.glVertex3f(halfWidth, -halfHeight, -halfLength);                   // Bottom Left Of The Quad (Back)
+                GL11.glVertex3f(-halfWidth, -halfHeight, -halfLength);                  // Bottom Right Of The Quad (Back)
+                GL11.glVertex3f(-halfWidth, halfHeight, -halfLength);                   // Top Right Of The Quad (Back)
+                GL11.glVertex3f(halfWidth, halfHeight, -halfLength);                    // Top Left Of The Quad (Back)
+
+                GL11.glVertex3f(-halfWidth, halfHeight, halfLength);                    // Top Right Of The Quad (Left)
+                GL11.glVertex3f(-halfWidth, halfHeight, -halfLength);                   // Top Left Of The Quad (Left)
+                GL11.glVertex3f(-halfWidth, -halfHeight, -halfLength);                  // Bottom Left Of The Quad (Left)
+                GL11.glVertex3f(-halfWidth, -halfHeight, halfLength);                   // Bottom Right Of The Quad (Left)
+
+                GL11.glVertex3f(halfWidth, halfHeight, -halfLength);                    // Top Right Of The Quad (Right)
+                GL11.glVertex3f(halfWidth, halfHeight, halfLength);                     // Top Left Of The Quad (Right)
+                GL11.glVertex3f(halfWidth, -halfHeight, halfLength);                    // Bottom Left Of The Quad (Right)
+                GL11.glVertex3f(halfWidth, -halfHeight, -halfLength);                   // Bottom Right Of The Quad (Right)
+                        
+                GL11.glEnd();                           // Done Drawing The Quads
+	        }
+                
+            if (hasLastPos && !listEntry.segmentStart) {
+                brightness = 0.5f;
+                if (afterCurrent) {
+                        GL11.glColor3f(0.0f, 0.0f, brightness);
+                }
+                else {
+                        GL11.glColor3f(brightness, 0.0f, 0.0f);
+                }                               
+                GL11.glLoadIdentity();
+                GL11.glBegin(GL11.GL_LINES);    
+//                      GL11.glColor3f(1.0f, 0.0f, 0.0f);                               
+                GL11.glVertex3f(lastX, lastY, lastZ);
+                GL11.glVertex3f(x, y, z);
+                GL11.glEnd();
+            }
+                
+            lastX = x;
+            lastY = y;
+            lastZ = z;
+            hasLastPos = true;
+            if (listEntry.locationListEntry != null && listEntry.locationListEntry.getStartLocation().equals(this.selectedTimeInterval.getStartLocation())) {
+                afterCurrent = true;
+            }
+        }
+    }
 	
 	void renderRoverModel() {
 		if (roverModelLocationMetadata == null) {
@@ -1217,53 +1308,22 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 		GL11.glDisable(GL11.GL_LIGHTING);
 	}
 	
-	public void moveRoverModelForward() {
-		LocationCounter roverModelLocation = null;
-		if (roverModelLocationMetadata != null) {
-			roverModelLocation = roverModelLocationMetadata.location;
-		}
-		if (roverModelLocation == null) {
-			roverModelLocation = currentLocationCounter;
-		}
-		int index = Arrays.binarySearch(allLocations, roverModelLocation);
-		if (index >= 0 && index < allLocations.length-1) {
-			roverModelLocation = allLocations[index + 1];
-		}
-		else if (index < 0) {
-			index = -index -1;
-			if (index > allLocations.length-1)
-				index = allLocations.length-1;
-			roverModelLocation = allLocations[index];
-		}
-		roverModelLocationMetadata =workspace.getLocationMetadata().getEntry(selectedSpacecraftId, roverModelLocation);
-		editor.settings.panShowRoverModel = true;
-		editor.fireViewSettingsChanged(null, editor.settings);
-		this.redraw();
-	}
-	
-	public void moveRoverModelBackward() {
-		LocationCounter roverModelLocation = null;
-		if (roverModelLocationMetadata != null) {
-			roverModelLocation = roverModelLocationMetadata.location;
-		}
-		if (roverModelLocation == null) {
-			roverModelLocation = currentLocationCounter;
-		}
-		int index = Arrays.binarySearch(allLocations, roverModelLocation);
-		if (index > 0) {
-			roverModelLocation = allLocations[index - 1];
-		}
-		else if (index < 0) {
-			index = -index -1 - 1;
-			if (index < 0) {
-				index = 0;
-			}
-			roverModelLocation = allLocations[index];
-		}
-		roverModelLocationMetadata =workspace.getLocationMetadata().getEntry(selectedSpacecraftId, roverModelLocation);
-		editor.settings.panShowRoverModel = true;
-		editor.fireViewSettingsChanged(null, editor.settings);
-		this.redraw();
+	private RoverTrackingListEntry findHotspotAt(float screenx, float screeny) {
+		RoverTrackingListEntry foundEntry = null;
+		float foundDistsq = -1.0f;
+        for (int i=0; i<roverTrackingList.size()-1; i++) {
+        	RoverTrackingListEntry listEntry = (RoverTrackingListEntry) roverTrackingList.get(i);
+        	if (listEntry.screenX != 0.0f || listEntry.screenY != 0.0f) {
+        		float dx = screenx - listEntry.screenX;
+        		float dy = screeny - listEntry.screenY;
+        		float distsq = dx*dx + dy*dy;
+        		if (distsq < 400.0f && (foundDistsq < 0.0f || distsq < foundDistsq)) {
+        			foundEntry = listEntry;
+        			foundDistsq = distsq;
+        		}
+        	}
+        }
+        return foundEntry;
 	}
 	
 	private void fillRoverQuaternionMatrix() {
@@ -1644,6 +1704,57 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 				);
 	}
 	
+	public void moveRoverModelForward() {
+		LocationCounter roverModelLocation = null;
+		if (roverModelLocationMetadata != null) {
+			roverModelLocation = roverModelLocationMetadata.location;
+		}
+		if (roverModelLocation == null) {
+			roverModelLocation = currentLocationCounter;
+		}
+		int index = Arrays.binarySearch(allLocations, roverModelLocation);
+		if (index >= 0 && index < allLocations.length-1) {
+			roverModelLocation = allLocations[index + 1];
+		}
+		else if (index < 0) {
+			index = -index -1;
+			if (index > allLocations.length-1)
+				index = allLocations.length-1;
+			roverModelLocation = allLocations[index];
+		}
+		roverModelLocationMetadata =workspace.getLocationMetadata().getEntry(selectedSpacecraftId, roverModelLocation);
+		editor.settings.panShowRoverModel = true;
+		editor.fireViewSettingsChanged(null, editor.settings);
+		this.redraw();
+	}
+	
+	public void moveRoverModelBackward() {
+		LocationCounter roverModelLocation = null;
+		if (roverModelLocationMetadata != null) {
+			roverModelLocation = roverModelLocationMetadata.location;
+		}
+		if (roverModelLocation == null) {
+			roverModelLocation = currentLocationCounter;
+		}
+		int index = Arrays.binarySearch(allLocations, roverModelLocation);
+		if (index > 0) {
+			roverModelLocation = allLocations[index - 1];
+		}
+		else if (index < 0) {
+			index = -index -1 - 1;
+			if (index < 0) {
+				index = 0;
+			}
+			roverModelLocation = allLocations[index];
+		}
+		roverModelLocationMetadata =workspace.getLocationMetadata().getEntry(selectedSpacecraftId, roverModelLocation);
+		editor.settings.panShowRoverModel = true;
+		editor.fireViewSettingsChanged(null, editor.settings);
+		this.redraw();
+	}
+	
+	
+	
 	int keyCode;
 	int	keyStateMask;
 	long keyStartTime = 0;
@@ -1738,6 +1849,7 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	public void mouseDown(MouseEvent e) {
 //		System.out.println("mouseDown "+e);
 		mousePressed = true;
+		mouseDragged = false;
 		mouseStartTime = System.currentTimeMillis();
 		mouseStopTime = 0;
 		mouseStartX = e.x;
@@ -1751,9 +1863,14 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 	}
 
 	public void mouseUp(MouseEvent e) {
-//		System.out.println("mouseUp "+e);
 		mousePressed = false;
 		mouseStopTime = System.currentTimeMillis();
+		if (!mouseDragged) {
+			RoverTrackingListEntry entry = findHotspotAt(e.x, e.y);
+			if (entry != null) {
+				editor.setSelectedTimeInterval(entry.locationListEntry, false);
+			}
+		}
 	}
 	
 	public void mouseMove(MouseEvent e) {
@@ -1762,6 +1879,15 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 			mouseX = e.x;
 			mouseY = e.y;
 			mouseStateMask = e.stateMask;
+			mouseDragged = true;
+		}
+		else {
+			RoverTrackingListEntry entry = findHotspotAt(e.x, e.y);
+			if (entry != null) {
+				roverModelLocationMetadata = entry.locationMetadataEntry;
+				editor.settings.panShowRoverModel = true;
+				this.redraw();
+			}			
 		}
 	}
 	
@@ -2008,6 +2134,13 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 			currentLocationVectorB = simpleMove(currentLocationVectorB, dstLocationVectorB, moveLocationVectorB*moveTime);
 			currentLocationVectorC = simpleMove(currentLocationVectorC, dstLocationVectorC, moveLocationVectorC*moveTime);			
 			moved = true;
+			if (!isMovingToLocation()) {
+				if (roverModelLocationMetadata != null && roverModelLocationMetadata.location.equals(currentLocationCounter)) {
+					editor.settings.panShowRoverModel = false;
+					// huh. Can we do this safely here? Probably not.
+					//editor.fireViewSettingsChanged(null, editor.settings);
+				}
+			}
 		}
 		return moved;
 	}
