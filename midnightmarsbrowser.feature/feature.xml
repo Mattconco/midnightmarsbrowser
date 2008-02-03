@@ -2,7 +2,7 @@
 <feature
       id="midnightmarsbrowser.feature"
       label="Midnight Mars Browser"
-      version="2.0.0.20080120"
+      version="2.0.0.20080203"
       os="macosx,win32"
       ws="carbon,win32"
       arch="ppc,x86">
