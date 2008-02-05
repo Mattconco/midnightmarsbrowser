@@ -65,11 +65,17 @@ class PanImageLoader implements Runnable {
 		while (!shutdown) {
 			PanImageEntry foundPanImageEntry = null;
 			
+			if (suspended) {
+				try {
+					Thread.sleep(10);
+				}
+				catch (Throwable e) {					
+				}
+				continue;
+			}
+			
 			Thread.yield();
 			
-			if (suspended)
-				continue;
-
 			synchronized(this) {
 				PanImageEntry[] sortedPanImageList = canvas.sortedPanImageList;
 				for (int n=0; n<sortedPanImageList.length; n++) {
@@ -215,6 +221,11 @@ class PanImageLoader implements Runnable {
 				}
 			}
 			else {
+				try {
+					Thread.sleep(10);
+				}
+				catch (Throwable e) {					
+				}
 				loading = false;
 			}
 		}
