@@ -16,7 +16,6 @@ import java.util.Arrays;
 import java.util.Comparator;
 
 import javax.imageio.ImageIO;
-import javax.vecmath.Matrix4d;
 
 import midnightmarsbrowser.application.Application;
 import midnightmarsbrowser.application.MMBWorkspace;
@@ -2398,6 +2397,7 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 		matrix.flip();
 	}	
 	
+/*	
 	void fillMatrix(DoubleBuffer matrix, Matrix4d m) {
 		matrix.put(m.m00);
 		matrix.put(m.m01);
@@ -2416,6 +2416,7 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 		matrix.put(m.m32);
 		matrix.put(m.m33);
 	}
+*/
 	
 	void fillIdentityMatrix(FloatBuffer matrix) {
 		matrix.rewind();
