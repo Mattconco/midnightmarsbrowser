@@ -1,0 +1,11 @@
+#Info about support for downloading Phoenix images
+
+= Downloading Phoenix images =
+
+Cross-posted from UMSF:
+
+I've updated MMB 2.0 to add a basic utility for downloading Phoenix images. Two new menu options are under the Update menu: "Fast Update Phoenix Images" and "Full Update Phoenix Images". Both options are similar, they download images from http://phoenix.lpl.arizona.edu/images/gallery/. As the name suggests, "Fast Update" is faster and I suggest you use that one most of the time. When you run them, the output in the Update Console explains what happens. 
+
+This is just to help with downloading files; there is no support for Phoenix Slideshows or Panorama views as there is with MER. This is because the two missions are really very different and it would be more work than I have time for to expand MMB 2.0 to accommodate Phoenix. Phoenix really requires a special program of it's own. I might try making one sometime (it's really really tempting), but don't be surprised if it's only for Mac this time, or if it never happens at all.
+
+The JPGs are stored under {mmbworkspace}/Phoenix/jpg and the files are not renamed, ie the filenames are still lg_xxx.jpg. However, newly downloaded images are copied to a folder under {mmbworkspace}/Phoenix/inbox/{timestamp}, so you can see what images have just downloaded using Windows Explorer or the Mac OS Finder. You can open the jpgs in a text editor and view any metadata information that's there, including the product id/proper filename.
