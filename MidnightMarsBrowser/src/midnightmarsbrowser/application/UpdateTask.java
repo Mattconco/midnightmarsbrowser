@@ -40,10 +40,13 @@ import java.net.NoRouteToHostException;
 import java.net.URL;
 import java.net.URLDecoder;
 import java.net.UnknownHostException;
+import java.text.SimpleDateFormat;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Vector;
 
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -61,6 +64,7 @@ import midnightmarsbrowser.editors.PanExportImageEntry;
 import midnightmarsbrowser.editors.UpdateViewerEditor;
 import midnightmarsbrowser.editors.ViewerEditor;
 import midnightmarsbrowser.metadata.ImageMetadata;
+import midnightmarsbrowser.metadata.ImageMetadataEntry;
 import midnightmarsbrowser.metadata.ImageStretchMetadata;
 import midnightmarsbrowser.metadata.ImageStretchMetadataEntry;
 import midnightmarsbrowser.metadata.LocationDescriptionMetadata;
@@ -403,6 +407,10 @@ public class UpdateTask implements Runnable, IUpdateTask {
 				MetadataSlicerDicer builder = new MetadataSlicerDicer(workspace, this);
 				builder.sliceAndDice1x();
 			}
+			else if (params.mode == UpdateParams.MODE_UPDATE_PHOENIX_JPG) {
+				doUpdatePhoenixImages();
+			}
+			
 			completed = true;
 		} catch (UnknownHostException e) {
 			logln(e.toString());
@@ -792,6 +800,7 @@ public class UpdateTask implements Runnable, IUpdateTask {
 				+ MerUtils.displayRoverNameFromRoverCode(roverCode)
 				+ " raw images from Exploratorium. Last download time is "
 				+ MerUtils.getExplDateFormat().format(params.downloadStartExplDate));
+
 		// This didn't work; expl directory mod times aren't updated correctly.
 		//StringBuffer pageCode = new StringBuffer();
 		//String urlString = MerUtils.exploratoriumUrlStringFrom(roverCode);
@@ -2088,6 +2097,282 @@ public class UpdateTask implements Runnable, IUpdateTask {
 		}
 	}
 	
+	void doUpdatePhoenixImages() {
+		final String rootURL = "http://phoenix.lpl.arizona.edu/images/gallery/";		
+		boolean done = false;
+		int index = 300;		
+		int missCount = 0;
+		final int maxMissCount = 20;
+		int imagesDownloaded = 0;
+		int maxContentSize = -1;
+		
+		File imageDir = new File(workspace.getWorkspaceDir(), "Phoenix"+File.separator+"jpg");
+		if (!imageDir.exists()) {
+			imageDir.mkdirs();
+		}
+		SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HHmm", Locale.US);
+		String dateStr = dateFormat.format(new Date());
+		String inboxDirStr = "inbox"+File.separator+dateStr;
+		File inboxDir = new File(workspace.getWorkspaceDir(), "Phoenix"+File.separator+inboxDirStr);
+		
+		File renamedDir = new File(workspace.getWorkspaceDir(), "Phoenix"+File.separator+"renamed");
+		if (!renamedDir.exists()) {
+			renamedDir.mkdirs();
+		}
+		
+		if (params.fastUpdate) {
+			logln("Fast Scanning for new Phoenix images at "+rootURL);
+			logln("Images larger than 500K will be ignored.");
+			maxContentSize = 1024*500;			
+			index = 300;
+			try {
+				String [] existingFiles = imageDir.list();
+				for (int i=0; i<existingFiles.length; i++) {
+					String fn = existingFiles[i];
+					if (fn.startsWith("lg_") && fn.endsWith(".jpg")) {
+						int val = Integer.valueOf(fn.substring(3, fn.length()-4)).intValue();
+						if (val > index)
+							index = val;
+					}
+				}
+			}
+			catch (Exception e) {			
+			}
+		}
+		else {
+			logln("Full Scan for new Phoenix images at "+rootURL);
+		}
+		
+		logln("All downloaded images are stored in directory "+imageDir+" (do not touch these images)");
+		logln("Images are also renamed and stored in directory "+renamedDir+" (these images may be discarded if desired)");
+		logln("Any new images during this update will also be renamed and copied to directory "+inboxDir+ " (these images may be discarded if desired)");
+		
+		while (!done) {
+			try {
+				index++;
+				String filename = "lg_"+index+".jpg";
+				String downloadURL = rootURL+filename;
+				File saveFile = new File(imageDir, filename);
+				log(filename);
+				log(" ");
+				boolean downloaded = updateFileFromURL(saveFile, new URL(downloadURL), true, true, maxContentSize);
+				if (downloaded) {
+					if (!inboxDir.exists()) {
+						inboxDir.mkdirs();
+					}
+					PhoenixMetadataEntry metadata = getPhoenixMetadataFromJpg(saveFile, index);
+					if (metadata != null && metadata.productId != null & metadata.productId.length() > 0) {
+						String newFilename = metadata.productId+".jpg";
+						log(" Copying to renamed/"+newFilename);
+						File renamedFile = new File(renamedDir, newFilename);
+						copyFile(saveFile, renamedFile);
+						log(".  Copying to "+inboxDirStr+File.separator+newFilename);
+						File inboxFile = new File(inboxDir, newFilename);
+						copyFile(saveFile, inboxFile);
+					}
+					else {
+						log(" Copying to "+inboxDirStr+File.separator+filename);
+						File inboxFile = new File(inboxDir, filename);
+						copyFile(saveFile, inboxFile);
+					}
+					imagesDownloaded++;
+				}
+				missCount = 0;
+				logln();
+			}
+			catch (InvalidDownloadException e) {
+				logln(e.getMessage());
+				missCount++;
+				if (missCount > maxMissCount) {
+					logln("Scanned for "+missCount+" consecutive images without finding any; terminating.");
+					done = true;
+				}
+			}
+			catch (Exception e) {
+				logln("ERROR: "+e.getMessage());			
+				done = true;
+			}
+		}
+
+		logln(""+imagesDownloaded+" images downloaded.");
+		
+		indexPhoenixMetadata(imageDir, index+1);
+	}
+		
+	class PhoenixMetadataEntry implements Comparable {
+		String productId;
+		int sourceImageNumber = 0;
+		String frameId = "";
+		String frameType = "";
+		String instrumentName = "";
+		String localTrueSolarTime = "";
+		String releaseId = "";
+		String solarLongitude = "";
+		String filterName = "";
+		String exposureDuration = "";
+		String instrumentAzimuth = "";
+		String instrumentElevation = "";
+		String planetDayNumber = "";
+		int fileNumber = 0;
+		
+		public int compareTo(Object arg0) {
+			PhoenixMetadataEntry entry = (PhoenixMetadataEntry) arg0;
+			return productId.compareTo(entry.productId);
+		}		
+	}
+	
+	void indexPhoenixMetadata(File imageDir, int lastFileNumber) {
+		logln("Scanning for metadata in JPG files in "+imageDir.getAbsolutePath());
+		// Go through files in order; this was the easiest way
+		HashMap metadata = new HashMap();
+		for (int n=0; n<lastFileNumber; n++) {
+			File file = new File(imageDir, "lg_"+n+".jpg");
+			if (file.isFile()) {
+				PhoenixMetadataEntry entry = getPhoenixMetadataFromJpg(file, n);
+				if (entry != null && entry.productId != null) {
+					metadata.put(entry.productId, entry);					
+				}
+			}
+		}
+		PhoenixMetadataEntry[] array = new PhoenixMetadataEntry[metadata.size()];
+		array = (PhoenixMetadataEntry[]) metadata.values().toArray(array);
+		Arrays.sort(array);
+		
+		File csvFile = new File(workspace.getWorkspaceDir(), "Phoenix"+File.separator+"metadata.csv");
+		logln("Writing metadata to file "+csvFile);
+		try {
+			BufferedWriter writer = new BufferedWriter(new FileWriter(csvFile));
+			String NL = System.getProperty("line.separator");
+			writer.write("PRODUCT_ID, source image number, PLANET_DAY_NUMBER, LOCAL_TRUE_SOLAR_TIME, INSTRUMENT_AZIMUTH, INSTRUMENT_ELEVATION, FILTER_NAME, FRAME_ID, FRAME_TYPE, INSTRUMENT_NAME, RELEASE_ID, SOLAR_LONGITUDE, EXPOSURE_DURATION");			
+			writer.write(NL);
+			for (int n=0; n<array.length; n++) {
+				PhoenixMetadataEntry entry = array[n];
+				writer.write(entry.productId);
+				writer.write(",");
+				writer.write(""+entry.sourceImageNumber);
+				writer.write(",");
+				writer.write(entry.planetDayNumber);
+				writer.write(",");
+				writer.write(entry.localTrueSolarTime);
+				writer.write(",");
+				writer.write(entry.instrumentAzimuth);
+				writer.write(",");
+				writer.write(entry.instrumentElevation);
+				writer.write(",");
+				writer.write(entry.filterName);
+				writer.write(",");
+				writer.write(entry.frameId);
+				writer.write(",");
+				writer.write(entry.frameType);
+				writer.write(",");
+				writer.write(entry.instrumentName);
+				writer.write(",");
+				writer.write(entry.releaseId);
+				writer.write(",");
+				writer.write(entry.solarLongitude);
+				writer.write(",");
+				writer.write(entry.exposureDuration);
+				writer.write(NL);
+			}
+			writer.close();
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+	}
+	
+	PhoenixMetadataEntry getPhoenixMetadataFromJpg(File file, int imageNumber) {
+		int fileLength = (int) file.length();
+		byte[] bytes = new byte[fileLength];
+		try {
+			FileInputStream fis = new FileInputStream(file);
+			fis.read(bytes);
+			fis.close();
+			int pos = 20;
+			if (unsignedByteToInt(bytes[pos++]) != 0xFF || unsignedByteToInt(bytes[pos++]) != 0xFE) {
+				debugln("File did not have expected header (1): "+file.getAbsolutePath());
+				return null;
+			}
+			int segLength = unsignedByteToInt(bytes[pos]) * 256 + unsignedByteToInt(bytes[pos+1]);
+			pos=pos+segLength;
+			if (unsignedByteToInt(bytes[pos++]) != 0xFF || unsignedByteToInt(bytes[pos++]) != 0xFE) {
+				debugln("File did not have expected header (2): "+file.getAbsolutePath());
+				return null;
+			}					
+			segLength = unsignedByteToInt(bytes[pos]) * 256 + unsignedByteToInt(bytes[pos+1]);					
+			String commentString = new String(bytes, pos+2, segLength-2);
+			if (!commentString.startsWith("PRODUCT_ID")) {
+				logln("File comment did not start with PRODUCT_ID: "+file.getAbsolutePath());
+				return null;
+			}
+			BufferedReader reader = new BufferedReader(new StringReader(commentString.toString()));
+			String inputLine;
+			PhoenixMetadataEntry entry = new PhoenixMetadataEntry();
+			entry.sourceImageNumber = imageNumber;
+			while ((inputLine = reader.readLine()) != null) {
+				if (inputLine.startsWith("PRODUCT_ID")) {
+					entry.productId = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("FRAME_ID")) {
+					entry.frameId = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("FRAME_TYPE")) {
+					entry.frameType = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("INSTRUMENT_NAME")) {
+					entry.instrumentName = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("LOCAL_TRUE_SOLAR_TIME")) {
+					entry.localTrueSolarTime = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("RELEASE_ID")) {
+					entry.releaseId = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("SOLAR_LONGITUDE")) {
+					entry.solarLongitude = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("FILTER_NAME")) {
+					entry.filterName = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("EXPOSURE_DURATION")) {
+					entry.exposureDuration = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("INSTRUMENT_AZIMUTH")) {
+					entry.instrumentAzimuth = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("INSTRUMENT_ELEVATION")) {
+					entry.instrumentElevation = phoenixMetadataStringValueFromLine(inputLine);
+				}
+				else if (inputLine.startsWith("PLANET_DAY_NUMBER")) {
+					entry.planetDayNumber = phoenixMetadataStringValueFromLine(inputLine);
+				}
+			}
+			return entry;
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}		
+		return null;
+	}
+	
+	static String phoenixMetadataStringValueFromLine(String line) {
+		String value = null;
+		int i = line.indexOf("=");
+		if (i >= 0) {
+			value = line.substring(i+1).trim();
+			if (value.startsWith("\"") || value.endsWith("\"")) {
+				value = value.substring(1, value.length()-1);
+			}
+		}
+		return value;
+	}
+	
+	static int unsignedByteToInt(byte b) {
+		return ((int)b) & 0x00FF;
+	}
+	
 	/**
 	 * 
 	 */
@@ -2184,6 +2469,10 @@ public class UpdateTask implements Runnable, IUpdateTask {
 	}
 
 	boolean updateFileFromURL(File saveFile, URL srcUrl, boolean skipSameSize, boolean skipLaterMod) throws InvalidDownloadException, Exception {
+		return updateFileFromURL(saveFile, srcUrl, skipSameSize, skipLaterMod, -1);
+	}	
+	
+	boolean updateFileFromURL(File saveFile, URL srcUrl, boolean skipSameSize, boolean skipLaterMod, int maxLength) throws InvalidDownloadException, Exception {
 		boolean keepTrying = true;
 		int tryNumber = 1;
 		byte[] byteArray = null;
@@ -2200,14 +2489,19 @@ public class UpdateTask implements Runnable, IUpdateTask {
 				lastModified = connection.getLastModified();
 				if (lastModified <= 0) {
 					this.numErrors++;
-					throw new InvalidDownloadException("Last modified time not available.");
+					throw new InvalidDownloadException("Not found (last modified time not available).");
 				}
 				//System.out.println("remote lastModified = "+lastModified);
 
 				int contentLength = connection.getContentLength();
 				if (contentLength <= 0) {
 					numErrors++;
-					throw new InvalidDownloadException("Content length not available ("+contentLength+")");
+					throw new InvalidDownloadException("Not found (content length not available: "+contentLength+")");
+				}
+				
+				if (maxLength > 0 && contentLength > maxLength) {
+					log("skipped: content length exceeds maximum for fast download; use full download to get this file.");
+					return false;
 				}
 				
 				File saveFileDirectory = saveFile.getParentFile();
