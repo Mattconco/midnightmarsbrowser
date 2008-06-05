@@ -55,6 +55,8 @@ public class ApplicationActionBarAdvisor extends ActionBarAdvisor {
 	private GetLatestImagesFromJPLAction	getLatestImagesFromJPLAction;
 	private CheckForNewImagesAction checkForNewImagesAction;
 	private AdvancedUpdateImagesAction advancedImageUpdateAction;
+	private UpdatePhoenixImagesAction updatePhoenixImagesAction;
+	private UpdatePhoenixImagesFullAction updatePhoenixImagesFullAction;
 	private UpdatePDSImagesAction updatePDSImagesAction;
 	private RegenerateImagesAction 	regenerateImagesAction;
 	private RebuildImageIndexesAction rebuildImageIndexesAction;
@@ -181,6 +183,10 @@ public class ApplicationActionBarAdvisor extends ActionBarAdvisor {
 		register(advancedImageUpdateAction);
 		updatePDSImagesAction = new UpdatePDSImagesAction(window);
 		register(updatePDSImagesAction);
+		updatePhoenixImagesAction = new UpdatePhoenixImagesAction(window);
+		register(updatePhoenixImagesAction);
+		updatePhoenixImagesFullAction = new UpdatePhoenixImagesFullAction(window);
+		register(updatePhoenixImagesFullAction);
 		regenerateImagesAction = new RegenerateImagesAction(window);
 		register(regenerateImagesAction);
 		rebuildImageIndexesAction = new RebuildImageIndexesAction(window);
@@ -335,6 +341,8 @@ public class ApplicationActionBarAdvisor extends ActionBarAdvisor {
 		if (Application.isAdvancedMode()) {
 			updateMenu.add(updatePDSImagesAction);
 		}
+		updateMenu.add(updatePhoenixImagesAction);
+		updateMenu.add(updatePhoenixImagesFullAction);
 		updateMenu.add(regenerateImagesAction);
 		updateMenu.add(rebuildImageIndexesAction);
 		updateMenu.add(new Separator());

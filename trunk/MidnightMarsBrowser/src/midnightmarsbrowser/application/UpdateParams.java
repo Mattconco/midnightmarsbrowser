@@ -18,6 +18,7 @@ public class UpdateParams {
 	public static final int MODE_BUILD_METADATA = 8;
 	public static final int MODE_BUILD_METADATA_1X = 9;
 	public static final int MODE_EXPORT_PAN_IMAGES = 10;
+	public static final int MODE_UPDATE_PHOENIX_JPG = 11;
  	
 	public static final int DOWNLOAD_NONE = 0;
 	public static final int DOWNLOAD_FROM_JPL = 1;
