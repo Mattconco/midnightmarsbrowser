@@ -125,6 +125,7 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
     private LocationCounter[] allLocations;
 	private TimeInterval selectedTimeInterval;
 	//private LocationCounter roverModelLocation = null;
+	private boolean mouseOverRoverModel = false;
 	private LocationMetadataEntry roverModelLocationMetadata = null;
 	
 	// about 1.2 meters from bottom of WEB to top of camera mast
@@ -795,8 +796,8 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 					// to work better with rover tracking
 					renderHotspots();
 				}				
-				if (editor.settings.panShowRoverModel) {
-					//startPerspective(zNearRover, zFarHotspots);					
+				if (editor.settings.panShowRoverModel || mouseOverRoverModel) {
+					//startPerspective(zNearRover, zFarHotspots);
 					renderRoverModel();
 				}
 				else {
@@ -1884,9 +1885,13 @@ public class PanoramaCanvas extends GLCanvas implements KeyListener, MouseListen
 			RoverTrackingListEntry entry = findHotspotAt(e.x, e.y);
 			if (entry != null) {
 				roverModelLocationMetadata = entry.locationMetadataEntry;
-				editor.settings.panShowRoverModel = true;
+				mouseOverRoverModel = true;
 				this.redraw();
-			}			
+			}
+			else {
+				mouseOverRoverModel = false;
+				this.redraw();
+			}
 		}
 	}
 	
